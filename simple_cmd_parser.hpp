@@ -10,13 +10,13 @@
 
 class SimpleParser {
 protected:
-  int m_argc;
+  const int m_argc;
   const char *const *const m_argv;
 
 public:
   bool m_showHelp;
   SimpleParser() = delete;
-  SimpleParser(int argc, const char *const *const argv)
+  SimpleParser(const int argc, const char *const *const argv)
       : m_argc(argc), m_argv(argv), m_showHelp(false) {};
 
   template <typename T> std::string getTypeName(const std::optional<T> &) {
@@ -68,6 +68,7 @@ public:
 
     if (m_showHelp) {
       printHelp(val, prefix, description);
+      return;
     }
 
     for (int i = 1; i < m_argc; ++i) {
