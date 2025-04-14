@@ -1,23 +1,40 @@
 /*
  *
- * This file is part of SimpleCmdParser 
+ * This file is part of SimpleCmdParser
  * Copyright (c) https://github.com/tascvh/SimpleCmdParser
  *
  */
-#include <sstream>
-#include <optional>
+#pragma once
 #include <iostream>
+#include <optional>
+#include <sstream>
 
 class SimpleParser {
-protected:
   const int m_argc;
   const char *const *const m_argv;
 
-public:
-  bool m_showHelp;
-  SimpleParser() = delete;
-  SimpleParser(const int argc, const char *const *const argv)
-      : m_argc(argc), m_argv(argv), m_showHelp(false) {};
+  template <typename ArgType>
+  void
+  printHelp(std::optional<ArgType> arg, const std::string &prefix,
+            const std::string &description,
+            std::pair<std::optional<ArgType>, std::optional<ArgType>> minmax) {
+
+    auto &o1 = std::cout;
+    o1 << prefix + " : (" + getTypeName(arg) + ") " + description;
+
+    if (arg)
+      o1 << "\n\tDefault value : " << *arg;
+    else
+      o1 << "\n\tMandatory ";
+
+    if (minmax.first)
+      o1 << "\n\tmin value : " << minmax.first.value();
+
+    if (minmax.second)
+      o1 << "\n\tmax value : " << minmax.second.value();
+
+    o1 << std::endl;
+  }
 
   template <typename T> std::string getTypeName(const std::optional<T> &) {
     if (std::is_same<T, int>::value)
@@ -43,58 +60,76 @@ public:
     return "";
   }
 
-  template <typename ArgType>
-  void printHelp(std::optional<ArgType> arg, const std::string &prefix,
-                 const std::string &description) {
+public:
+  bool m_showHelp;
+  SimpleParser(const int argc, const char *const *const argv)
+      : m_argc(argc), m_argv(argv), m_showHelp(false) {};
 
-    auto tn = getTypeName(arg);
-    std::cout << prefix + " : (" + tn + ") " + description;
-    if (arg)
-      std::cout << " - Default value : " << *arg;
-    std::cout << std::endl;
-  }
+  auto programName() { return std::string(m_argv[0]); }
 
   template <typename ArgType>
-  void read(ArgType &val, const std::string &prefix,
-            const std::string &description = "") {
+  void
+  read(ArgType &val, const std::string &prefix,
+       const std::string &description = "",
+       std::pair<std::optional<ArgType>, std::optional<ArgType>> minmax = {}) {
     std::optional<ArgType> opt(std::move(val));
-    read(opt, prefix, description);
+    read(opt, prefix, description, minmax);
     val = std::move(*opt);
   }
 
   template <typename ArgType>
-  void read(std::optional<ArgType> &val, const std::string &prefix,
-            const std::string &description = "") {
+  void
+  read(std::optional<ArgType> &val, const std::string &prefix,
+       const std::string &description = "",
+       std::pair<std::optional<ArgType>, std::optional<ArgType>> minmax = {}) {
 
     if (m_showHelp) {
-      printHelp(val, prefix, description);
+      printHelp(val, prefix, description, minmax);
       return;
     }
 
     for (int i = 1; i < m_argc; ++i) {
       std::string arg(m_argv[i]);
       if (arg == prefix) {
+
         if constexpr (std::is_same<ArgType, bool>::value) {
+          // for boolean arguments we only check their existence
           val.emplace(true);
           return;
         }
+
         i++;
         if (i == m_argc) {
           auto s = "No value supplied for argument " + prefix;
           throw std::invalid_argument(s);
         }
 
+        ArgType result;
         std::string value(m_argv[i]);
         std::istringstream iss(value);
-        ArgType result;
-        if (iss >> result) {
-          val.emplace(std::move(result));
-          return;
-        } else {
+
+        if (!(iss >> result)) {
           auto s = "Cannot read (" + value + ") as " + getTypeName(val) +
                    " for argument " + prefix;
           throw std::invalid_argument(s);
         }
+
+        if (minmax.first && result < minmax.first) {
+          std::ostringstream oss;
+          oss << "Argument " << prefix << " cannot be smaller than "
+              << minmax.first.value();
+          throw std::invalid_argument(oss.str());
+        }
+
+        if (minmax.second && result > minmax.second) {
+          std::ostringstream oss;
+          oss << "Argument " << prefix << " cannot be greater than "
+              << minmax.second.value();
+          throw std::invalid_argument(oss.str());
+        }
+
+        val.emplace(std::move(result));
+        return;
       }
     }
   }
